@@ -1,0 +1,96 @@
+/* Basic layout for question cards */
+.question-card {
+	border: 1px solid #ddd;
+	border-radius: 6px;
+	padding: 12px;
+	margin: 12px 0;
+	background: #fafafa;
+}
+
+.question-text {
+	font-weight: 600;
+	margin-bottom: 8px;
+}
+
+.question-number {
+	font-size: 0.9rem;
+	color: #666;
+	margin-bottom: 6px;
+}
+
+.answers-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.answer-option {
+	padding: 8px 10px;
+	border: 1px solid #ccc;
+	background: white;
+	cursor: pointer;
+	border-radius: 4px;
+	text-align: left;
+}
+
+.answer-option:hover:not(:disabled) {
+	background: #f0f8ff;
+}
+
+.answer-option.selected {
+	outline: 2px solid #6ca0ff;
+}
+
+.answer-option.correct {
+	background: #d4f7d4; /* light green */
+	border-color: #67c567;
+}
+
+.answer-option.incorrect {
+	background: #ffd6d6; /* light red */
+	border-color: #ff7b7b;
+}
+
+.answer-option:disabled {
+	cursor: default;
+	opacity: 0.95;
+}
+
+/* Login and form visibility */
+.hidden { display: none; }
+
+.login-container {
+	border: 1px solid #e0e0e0;
+	padding: 16px;
+	border-radius: 8px;
+	margin-bottom: 16px;
+	background: #fff;
+}
+
+.login-container h2 {
+	margin-top: 0;
+}
+
+.credentials-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 8px 0 12px 0;
+}
+
+.small-button {
+	padding: 6px 8px;
+	font-size: 0.9rem;
+}
+
+.login-actions { margin-top: 8px; }
+
+.quiz-summary {
+	padding: 16px;
+	border: 1px solid #e6e6e6;
+	border-radius: 8px;
+	background: #fff;
+}
+
+.summary-actions { margin-top: 12px; }
+.summary-actions button { padding: 8px 12px; }

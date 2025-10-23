@@ -10,9 +10,28 @@
         <div class="container">
             <p class="title">Trivia Setup</p>
             <p class="base-text">On this page, you will pick the amount of questions you want, and choose the topic.</p>
-            <form id="triviaFdorm">
+            <!-- Login screen shown first -->
+            <div id="loginContainer" class="login-container">
+                <h2>Login</h2>
+                <label for="username" class="base-text">Username:</label>
+                <input type="text" id="username" name="username" placeholder="Enter username">
+
+                <label for="password" class="base-text">Password:</label>
+                <input type="password" id="password" name="password" placeholder="Enter password">
+
+                <div class="credentials-row">
+                    <label><input type="checkbox" id="rememberCreds"> Remember credentials</label>
+                    <button type="button" id="clearCreds" class="small-button">Clear saved</button>
+                </div>
+
+                <div class="login-actions">
+                    <button type="button" id="loginBtn" class="submit-button">Login & Continue</button>
+                </div>
+            </div>
+
+            <form id="triviaForm" class="hidden">
                 <label for="num-questions" class="base-text">Number of Questions:</label>
-                <input type="number" id="numQuestions" name="numQustions" min="1" max="50" value="10" required>
+                <input type="number" id="numQuestions" name="numQuestions" min="1" max="50" value="10" required>
                 
                 <label for="category" class="base-text">Category:</label>
                 <select id="category" name="category" required>
@@ -50,14 +69,26 @@
                 </select>
 
                 <label for="type" class="base-text">Type:</label>
-                <select id="type" name="type" required>
+                <select id="type" name="responseType" required>
                     <option value="multiple">Multiple Choice</option>
-                    <option value="boolean">True / False</option>"
+                    <option value="boolean">True / False</option>
                 </select>
+
+                <div class="timer-row">
+                    <label><input type="checkbox" id="enableTimer"> Enable timer (auto-advance)</label>
+                    <label for="timerSeconds">Seconds:</label>
+                    <input type="number" id="timerSeconds" name="timerSeconds" min="1" max="300" value="10">
+                </div>
                 
                 <button type="submit" id="triviaSubmit" class="submit-button">Start Trivia</button>
 
                 <div id="questionsContainer"></div>
+                <div id="quizControls" class="hidden">
+                    <span id="timerDisplay" aria-live="polite"></span>
+                    <button type="button" id="nextBtn" disabled>Next</button>
+                    <button type="button" id="finishBtn" class="hidden">Finish</button>
+                    <button type="button" id="showScoreBtn" class="hidden">Show Score</button>
+                </div>
             </form>
         </div>
     </body>
