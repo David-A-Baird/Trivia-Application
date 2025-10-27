@@ -94,3 +94,8 @@
 
 .summary-actions { margin-top: 12px; }
 .summary-actions button { padding: 8px 12px; }
+
+.summary-wrapper { padding: 12px; }
+.summary-wrapper table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+.summary-wrapper th, .summary-wrapper td { border: 1px solid #ddd; padding: 6px 8px; }
+.summary-wrapper th { background: #f6f6f6; text-align: left; }

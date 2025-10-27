@@ -87,10 +87,28 @@ document.addEventListener('DOMContentLoaded', () => {
             if (triviaForm) triviaForm.classList.remove('hidden');
         });
     }
+
+    // View Summary button
+    const viewSummaryBtn = document.getElementById('viewSummaryBtn');
+    if (viewSummaryBtn) {
+        viewSummaryBtn.addEventListener('click', () => {
+            const rawCreds = localStorage.getItem(CRED_KEY);
+            const user = rawCreds ? JSON.parse(rawCreds).username : null;
+            if (!user) {
+                alert('No user saved. Please login first (enter username and optionally remember).');
+                return;
+            }
+            renderSummary(user);
+            // show summary in questions container
+            if (triviaForm) triviaForm.classList.add('hidden');
+            if (loginContainer) loginContainer.classList.remove('hidden');
+        });
+    }
 });
 
 // Credential storage utilities
 const CRED_KEY = 'trivia_app_creds_v1';
+const GAMES_KEY_PREFIX = 'trivia_games_'; // followed by username
 
 function loadSavedCredentials(usernameEl, passwordEl, rememberEl) {
     try {
@@ -155,6 +173,117 @@ function startQuiz(questions, container) {
     }
 
     renderCurrentQuestion(container);
+}
+
+// After quiz ends, record a game for the current user (if available)
+function recordGameResult({ username, difficulty, type, total, correct, timeSeconds }) {
+    if (!username) return;
+    try {
+        const key = GAMES_KEY_PREFIX + username;
+        const raw = localStorage.getItem(key);
+        const games = raw ? JSON.parse(raw) : [];
+        const entry = {
+            date: new Date().toISOString(),
+            difficulty: difficulty || 'any',
+            type: type || 'any',
+            total: total || 0,
+            correct: correct || 0,
+            timeSeconds: timeSeconds || 0,
+        };
+        games.push(entry);
+        // cap to last 50 games to avoid unbounded growth
+        while (games.length > 50) games.shift();
+        localStorage.setItem(key, JSON.stringify(games));
+    } catch (e) {
+        console.warn('Failed to record game result:', e);
+    }
+}
+
+function computeAggregatesForUser(username) {
+    const key = GAMES_KEY_PREFIX + username;
+    const raw = localStorage.getItem(key);
+    const games = raw ? JSON.parse(raw) : [];
+
+    // Aggregate by difficulty + type
+    const agg = {};
+    games.forEach(g => {
+        const bucket = `${g.difficulty}|${g.type}`;
+        if (!agg[bucket]) agg[bucket] = { games: 0, bestCorrect: 0, bestTime: null, records: [] };
+        const a = agg[bucket];
+        a.games += 1;
+        if (g.correct > a.bestCorrect) a.bestCorrect = g.correct;
+        if (a.bestTime === null || g.timeSeconds < a.bestTime) a.bestTime = g.timeSeconds;
+        a.records.push(g);
+    });
+
+    return { games, agg };
+}
+
+function renderSummary(username) {
+    const container = document.getElementById('questionsContainer') || document.body;
+    const { games, agg } = computeAggregatesForUser(username);
+    const wrapper = document.createElement('div');
+    wrapper.className = 'summary-wrapper';
+    wrapper.innerHTML = `<h2>Summary for ${username}</h2>`;
+
+    if (!games.length) {
+        wrapper.innerHTML += '<p>No games played yet.</p>';
+    } else {
+        // average completion percent across all games
+        let sumPercent = 0;
+        let pctCount = 0;
+        games.forEach(g => {
+            if (g.total && g.total > 0) {
+                sumPercent += (g.correct / g.total) * 100;
+                pctCount += 1;
+            }
+        });
+        const avgPercent = pctCount ? (sumPercent / pctCount) : 0;
+        wrapper.innerHTML += `<p>Average completion: <strong>${avgPercent.toFixed(1)}%</strong></p>`;
+
+        // overall list of recent games
+        const recent = document.createElement('div');
+        recent.innerHTML = '<h3>Recent games</h3>';
+        const ul = document.createElement('ul');
+        games.slice().reverse().forEach(g => {
+            const li = document.createElement('li');
+            li.textContent = `${new Date(g.date).toLocaleString()}: ${g.correct}/${g.total} (${g.difficulty} / ${g.type}) in ${formatSeconds(g.timeSeconds)}`;
+            ul.appendChild(li);
+        });
+        recent.appendChild(ul);
+        wrapper.appendChild(recent);
+
+        // aggregates
+        const aggDiv = document.createElement('div');
+        aggDiv.innerHTML = '<h3>Aggregates</h3>';
+        const table = document.createElement('table');
+        table.innerHTML = '<tr><th>Difficulty</th><th>Type</th><th>Games</th><th>Best Correct</th><th>Fastest Time</th></tr>';
+        Object.keys(agg).forEach(bucket => {
+            const [difficulty, type] = bucket.split('|');
+            const a = agg[bucket];
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${difficulty}</td><td>${type}</td><td>${a.games}</td><td>${a.bestCorrect}</td><td>${a.bestTime !== null ? formatSeconds(a.bestTime) : '-'}</td>`;
+            table.appendChild(tr);
+        });
+        aggDiv.appendChild(table);
+        wrapper.appendChild(aggDiv);
+    }
+
+    // replace questions container with summary
+    const questionsContainer = document.getElementById('questionsContainer');
+    if (questionsContainer) {
+        questionsContainer.innerHTML = '';
+        questionsContainer.appendChild(wrapper);
+    } else {
+        document.body.appendChild(wrapper);
+    }
+}
+
+function formatSeconds(sec) {
+    const s = Math.max(0, Math.floor(sec));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${String(r).padStart(2, '0')}`;
 }
 
 function renderCurrentQuestion(container) {
@@ -284,6 +413,17 @@ function endQuiz(container) {
 
     const total = quizQuestions.length || 0;
     const correct = correctCount;
+
+    // record result for user if possible
+    try {
+        const rawCreds = localStorage.getItem(CRED_KEY);
+        const user = rawCreds ? JSON.parse(rawCreds).username : null;
+        const difficulty = document.getElementById('difficulty') ? document.getElementById('difficulty').value : 'any';
+        const type = document.getElementById('type') ? document.getElementById('type').value : 'any';
+        recordGameResult({ username: user, difficulty, type, total, correct, timeSeconds: Math.floor(elapsedMs / 1000) });
+    } catch (e) {
+        console.warn('Failed to persist game result', e);
+    }
 
     container.innerHTML = '';
     const summary = document.createElement('div');
