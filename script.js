@@ -104,11 +104,52 @@ document.addEventListener('DOMContentLoaded', () => {
             if (loginContainer) loginContainer.classList.remove('hidden');
         });
     }
+
+    // Resume button wiring: show if saved progress exists for the current username
+    const resumeBtn = document.getElementById('resumeBtn');
+    function updateResumeButtonVisibility() {
+        const uname = usernameEl ? usernameEl.value.trim() : '';
+        if (!resumeBtn) return;
+        if (!uname) {
+            resumeBtn.classList.add('hidden');
+            return;
+        }
+        const saved = loadQuizProgress(uname);
+        if (saved) resumeBtn.classList.remove('hidden'); else resumeBtn.classList.add('hidden');
+    }
+    // initial visibility
+    updateResumeButtonVisibility();
+    // update when username changes
+    if (usernameEl) usernameEl.addEventListener('input', updateResumeButtonVisibility);
+    if (resumeBtn) {
+        resumeBtn.addEventListener('click', () => {
+            const uname = usernameEl ? usernameEl.value.trim() : '';
+            if (!uname) {
+                alert('Enter a username to resume a saved quiz.');
+                return;
+            }
+            const saved = loadQuizProgress(uname);
+            if (!saved) {
+                alert('No saved quiz found for this user.');
+                return;
+            }
+            // hide login and show form
+            if (loginContainer) loginContainer.classList.add('hidden');
+            if (triviaForm) triviaForm.classList.remove('hidden');
+            resumeQuiz(saved, questionsContainer);
+        });
+    }
 });
 
 // Credential storage utilities
 const CRED_KEY = 'trivia_app_creds_v1';
 const GAMES_KEY_PREFIX = 'trivia_games_'; // followed by username
+const QUIZ_SAVE_PREFIX = 'trivia_save_'; // followed by username
+
+// Saved quiz state when resuming
+let savedQuizState = null;
+// Per-question answers recorded during the quiz (array of { selectedAnswerText, wasCorrect, answered } or null)
+let perQuestionAnswers = [];
 
 function loadSavedCredentials(usernameEl, passwordEl, rememberEl) {
     try {
@@ -140,18 +181,31 @@ function startQuiz(questions, container) {
     quizStartTime = Date.now();
     correctCount = 0;
     answeredCount = 0;
+    // initialize per-question answers array
+    perQuestionAnswers = new Array(quizQuestions.length).fill(null);
+
+    // mark form as in-quiz to hide setup
+    const triviaFormEl = document.getElementById('triviaForm');
+    if (triviaFormEl) triviaFormEl.classList.add('in-quiz');
+    // Show controls and wire them using shared setup so resume and start behave the same
     const quizControls = document.getElementById('quizControls');
+    if (quizControls) quizControls.classList.remove('hidden');
+    setupQuizControls(container);
+    renderCurrentQuestion(container);
+}
+
+// Wire quiz controls (Next, Finish, Show Score, Quit) in one place so resume works correctly
+function setupQuizControls(container) {
     const nextBtn = document.getElementById('nextBtn');
     const finishBtn = document.getElementById('finishBtn');
     const showScoreBtn = document.getElementById('showScoreBtn');
-    const timerDisplay = document.getElementById('timerDisplay');
+    const quitBtn = document.getElementById('quitBtn');
+    const quizControls = document.getElementById('quizControls');
 
-    if (quizControls) quizControls.classList.remove('hidden');
     if (finishBtn) finishBtn.classList.add('hidden');
     if (showScoreBtn) showScoreBtn.classList.add('hidden');
     if (nextBtn) nextBtn.disabled = true;
 
-    // Wire navigation buttons
     if (nextBtn) {
         nextBtn.onclick = () => {
             stopTimer();
@@ -171,7 +225,131 @@ function startQuiz(questions, container) {
             endQuiz(container);
         };
     }
+    if (quitBtn) {
+        quitBtn.onclick = () => {
+            const usernameEl = document.getElementById('username');
+            const username = usernameEl ? usernameEl.value.trim() : null;
+            if (!username) {
+                alert('Enter a username in the login box before quitting to save progress.');
+                return;
+            }
+            saveQuizProgress(username);
+            stopTimer();
+            // clear visible question UI so it doesn't remain shown unless user explicitly resumes
+            const questionsContainer = document.getElementById('questionsContainer');
+            if (questionsContainer) questionsContainer.innerHTML = '';
+            // reset transient in-memory quiz state so UI doesn't show previous quiz
+            quizQuestions = [];
+            perQuestionAnswers = [];
+            currentIndex = 0;
+            correctCount = 0;
+            answeredCount = 0;
+            quizStartTime = 0;
+            // hide quiz and show login area so user can resume later
+            const triviaFormEl = document.getElementById('triviaForm');
+            if (triviaFormEl) triviaFormEl.classList.add('hidden');
+            const loginContainer = document.getElementById('loginContainer');
+            if (loginContainer) loginContainer.classList.remove('hidden');
+            if (quizControls) quizControls.classList.add('hidden');
+            alert('Progress saved. You can resume this quiz later from the login screen.');
+            // show resume button if present
+            const resumeBtn = document.getElementById('resumeBtn');
+            if (resumeBtn) resumeBtn.classList.remove('hidden');
+        };
+    }
+}
 
+// Save current quiz progress to localStorage under the given username
+function saveQuizProgress(username) {
+    try {
+        if (!username) return;
+        const elapsedSeconds = quizStartTime ? Math.floor((Date.now() - quizStartTime) / 1000) : 0;
+        const enableTimer = document.getElementById('enableTimer');
+        const timerSecondsEl = document.getElementById('timerSeconds');
+        const data = {
+            savedAt: new Date().toISOString(),
+            username,
+            quizQuestions: quizQuestions || [],
+            currentIndex: currentIndex || 0,
+            perQuestionAnswers: perQuestionAnswers || new Array((quizQuestions||[]).length).fill(null),
+            correctCount: correctCount || 0,
+            answeredCount: answeredCount || 0,
+            elapsedSeconds,
+            timer: {
+                enabled: enableTimer ? !!enableTimer.checked : false,
+                timerSeconds: timerSecondsEl ? parseInt(timerSecondsEl.value, 10) || 10 : 10,
+                remainingSeconds: remainingSeconds || 0
+            },
+            settings: {
+                category: document.getElementById('category') ? document.getElementById('category').value : '',
+                difficulty: document.getElementById('difficulty') ? document.getElementById('difficulty').value : '',
+                type: document.getElementById('type') ? document.getElementById('type').value : '',
+                amount: document.getElementById('numQuestions') ? parseInt(document.getElementById('numQuestions').value, 10) || 0 : 0
+            }
+        };
+        const key = QUIZ_SAVE_PREFIX + username;
+        localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+        console.warn('Failed to save quiz progress:', e);
+    }
+}
+
+// Load saved quiz progress for a username (returns object or null)
+function loadQuizProgress(username) {
+    try {
+        if (!username) return null;
+        const key = QUIZ_SAVE_PREFIX + username;
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch (e) {
+        console.warn('Failed to load quiz progress:', e);
+        return null;
+    }
+}
+
+function clearSavedProgress(username) {
+    try {
+        if (!username) return;
+        const key = QUIZ_SAVE_PREFIX + username;
+        localStorage.removeItem(key);
+    } catch (e) {
+        console.warn('Failed to clear saved progress:', e);
+    }
+}
+
+// Resume a saved quiz state (restores globals and renders the current question)
+function resumeQuiz(savedData, container) {
+    if (!savedData) return;
+    quizQuestions = savedData.quizQuestions || [];
+    currentIndex = savedData.currentIndex || 0;
+    perQuestionAnswers = savedData.perQuestionAnswers || new Array(quizQuestions.length).fill(null);
+    correctCount = savedData.correctCount || 0;
+    answeredCount = savedData.answeredCount || 0;
+    // reconstruct quizStartTime so elapsed time continues correctly
+    quizStartTime = Date.now() - ((savedData.elapsedSeconds || 0) * 1000);
+    savedQuizState = savedData;
+    // show quiz UI
+    const triviaFormEl = document.getElementById('triviaForm');
+    if (triviaFormEl) triviaFormEl.classList.remove('hidden');
+    if (triviaFormEl) triviaFormEl.classList.add('in-quiz');
+    const quizControls = document.getElementById('quizControls');
+    if (quizControls) quizControls.classList.remove('hidden');
+    // restore timer controls to saved values so renderCurrentQuestion starts with the remaining seconds
+    try {
+        const enableTimerEl = document.getElementById('enableTimer');
+        const timerSecondsEl = document.getElementById('timerSeconds');
+        if (savedData.timer) {
+            if (enableTimerEl) enableTimerEl.checked = !!savedData.timer.enabled;
+            if (timerSecondsEl) timerSecondsEl.value = savedData.timer.remainingSeconds || savedData.timer.timerSeconds || timerSecondsEl.value;
+            // set remainingSeconds global so other code can see it
+            remainingSeconds = savedData.timer.remainingSeconds || 0;
+        }
+    } catch (e) {
+        // ignore
+    }
+    // Wire controls before rendering so Next/Finish/Quit work after resuming
+    setupQuizControls(container);
     renderCurrentQuestion(container);
 }
 
@@ -297,7 +475,8 @@ function renderCurrentQuestion(container) {
     const q = quizQuestions[currentIndex];
 
     const card = document.createElement('div');
-    card.className = 'question-card';
+    // use Bootstrap card styles and keep question-card for minimal overrides
+    card.className = 'card p-3 question-card';
 
     const numberEl = document.createElement('div');
     numberEl.className = 'question-number';
@@ -315,12 +494,14 @@ function renderCurrentQuestion(container) {
     shuffle(answers);
 
     const answersList = document.createElement('div');
-    answersList.className = 'answers-list';
+    // Use bootstrap utilities to stack buttons full width with gaps
+    answersList.className = 'answers-list d-grid gap-2';
 
     answers.forEach((ans) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'answer-option';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    // Use bootstrap button styles but keep the answer-option class for JS hooks
+    btn.className = 'btn btn-outline-primary answer-option text-start';
         btn.dataset.correct = ans.correct ? 'true' : 'false';
         btn.textContent = ans.text;
 
@@ -335,30 +516,45 @@ function renderCurrentQuestion(container) {
             const wasCorrect = btn.dataset.correct === 'true';
             if (wasCorrect) correctCount += 1;
 
-            // Mark selected and reveal correctness
+            // record per-question answer for resume
+            perQuestionAnswers[currentIndex] = { selectedAnswerText: btn.textContent, wasCorrect: wasCorrect, answered: true };
+
+            // Mark selected and reveal correctness (use bootstrap button classes)
             const optionButtons = answersList.querySelectorAll('.answer-option');
             optionButtons.forEach(ob => {
-                ob.classList.remove('selected');
+                // reset bootstrap state for safety
+                ob.classList.remove('selected', 'btn-primary', 'btn-success', 'btn-danger');
                 if (ob === btn) ob.classList.add('selected');
                 const isCorrect = ob.dataset.correct === 'true';
                 if (isCorrect) {
-                    ob.classList.add('correct');
+                    ob.classList.add('correct', 'btn-success');
+                    ob.classList.remove('btn-outline-primary');
                 } else if (ob === btn && !isCorrect) {
-                    ob.classList.add('incorrect');
+                    ob.classList.add('incorrect', 'btn-danger');
+                    ob.classList.remove('btn-outline-primary');
+                } else {
+                    // keep neutral outline for unselected wrong options
+                    ob.classList.remove('btn-success', 'btn-danger');
+                    ob.classList.add('btn-outline-primary');
                 }
                 ob.disabled = true;
             });
 
             // If this was the last question, show Show Score button
+            // If this was the last question, show Show Score button
             if (currentIndex >= quizQuestions.length - 1) {
-                if (showScoreBtn) showScoreBtn.classList.remove('hidden');
-                if (nextBtn) nextBtn.disabled = true;
-                if (finishBtn) finishBtn.classList.add('hidden');
+                const showScoreBtnEl = document.getElementById('showScoreBtn');
+                const nextBtnEl = document.getElementById('nextBtn');
+                const finishBtnEl = document.getElementById('finishBtn');
+                if (showScoreBtnEl) showScoreBtnEl.classList.remove('hidden');
+                if (nextBtnEl) nextBtnEl.disabled = true;
+                if (finishBtnEl) finishBtnEl.classList.add('hidden');
                 return;
             }
 
             // Otherwise enable Next
-            if (nextBtn) nextBtn.disabled = false;
+            const nextBtnEl2 = document.getElementById('nextBtn');
+            if (nextBtnEl2) nextBtnEl2.disabled = false;
         });
 
         answersList.appendChild(btn);
@@ -366,6 +562,46 @@ function renderCurrentQuestion(container) {
 
     card.appendChild(answersList);
     container.appendChild(card);
+
+    // If this question was already answered (from perQuestionAnswers or savedQuizState), reflect that in the UI
+    try {
+        const savedAns = (perQuestionAnswers && perQuestionAnswers[currentIndex]) || (savedQuizState && savedQuizState.perQuestionAnswers && savedQuizState.perQuestionAnswers[currentIndex]);
+        if (savedAns && savedAns.answered) {
+            const optionButtons = answersList.querySelectorAll('.answer-option');
+            optionButtons.forEach(ob => {
+                const isCorrect = ob.dataset.correct === 'true';
+                if (savedAns.selectedAnswerText && ob.textContent === savedAns.selectedAnswerText) {
+                    ob.classList.add('selected');
+                    if (isCorrect) {
+                        ob.classList.add('correct', 'btn-success');
+                        ob.classList.remove('btn-outline-primary');
+                    } else {
+                        ob.classList.add('incorrect', 'btn-danger');
+                        ob.classList.remove('btn-outline-primary');
+                    }
+                } else if (isCorrect) {
+                    ob.classList.add('correct', 'btn-success');
+                    ob.classList.remove('btn-outline-primary');
+                } else {
+                    ob.classList.add('btn-outline-primary');
+                }
+                ob.disabled = true;
+            });
+            card.dataset.answered = 'true';
+            const nextBtnEl = document.getElementById('nextBtn');
+            const finishBtnEl = document.getElementById('finishBtn');
+            const showScoreBtnEl = document.getElementById('showScoreBtn');
+            if (currentIndex >= quizQuestions.length - 1) {
+                if (showScoreBtnEl) showScoreBtnEl.classList.remove('hidden');
+                if (nextBtnEl) nextBtnEl.disabled = true;
+                if (finishBtnEl) finishBtnEl.classList.add('hidden');
+            } else {
+                if (nextBtnEl) nextBtnEl.disabled = false;
+            }
+        }
+    } catch (e) {
+        // ignore errors reflecting saved answers
+    }
 
     // Start timer if enabled
     const enableTimer = document.getElementById('enableTimer');
@@ -377,18 +613,29 @@ function renderCurrentQuestion(container) {
             if (card.dataset.answered !== 'true') {
                 card.dataset.answered = 'true';
                 answeredCount += 1;
+                // record unanswered (expired) state for resume
+                perQuestionAnswers[currentIndex] = { selectedAnswerText: null, wasCorrect: false, answered: true };
             }
             const optionButtons = answersList.querySelectorAll('.answer-option');
             optionButtons.forEach(ob => {
                 const isCorrect = ob.dataset.correct === 'true';
-                if (isCorrect) ob.classList.add('correct');
+                if (isCorrect) {
+                    ob.classList.add('correct', 'btn-success');
+                    ob.classList.remove('btn-outline-primary');
+                } else {
+                    ob.classList.remove('btn-success');
+                    ob.classList.add('btn-outline-primary');
+                }
                 ob.disabled = true;
             });
             // If last question, finish
             if (currentIndex >= quizQuestions.length - 1) {
-                if (showScoreBtn) showScoreBtn.classList.remove('hidden');
-                if (nextBtn) nextBtn.disabled = true;
-                if (finishBtn) finishBtn.classList.add('hidden');
+                const showScoreBtnEl = document.getElementById('showScoreBtn');
+                const nextBtnEl = document.getElementById('nextBtn');
+                const finishBtnEl = document.getElementById('finishBtn');
+                if (showScoreBtnEl) showScoreBtnEl.classList.remove('hidden');
+                if (nextBtnEl) nextBtnEl.disabled = true;
+                if (finishBtnEl) finishBtnEl.classList.add('hidden');
                 return;
             }
             // otherwise enable Next
@@ -402,6 +649,10 @@ function endQuiz(container) {
     if (!container) container = document.getElementById('questionsContainer');
     const quizControls = document.getElementById('quizControls');
     if (quizControls) quizControls.classList.add('hidden');
+
+    // remove in-quiz marker (restore setup visibility)
+    const triviaFormEl = document.getElementById('triviaForm');
+    if (triviaFormEl) triviaFormEl.classList.remove('in-quiz');
 
     // compute elapsed time
     const endTime = Date.now();
@@ -421,6 +672,8 @@ function endQuiz(container) {
         const difficulty = document.getElementById('difficulty') ? document.getElementById('difficulty').value : 'any';
         const type = document.getElementById('type') ? document.getElementById('type').value : 'any';
         recordGameResult({ username: user, difficulty, type, total, correct, timeSeconds: Math.floor(elapsedMs / 1000) });
+        // Clear any saved mid-quiz progress for this user since the quiz finished
+        if (user) clearSavedProgress(user);
     } catch (e) {
         console.warn('Failed to persist game result', e);
     }
@@ -428,14 +681,14 @@ function endQuiz(container) {
     container.innerHTML = '';
     const summary = document.createElement('div');
     summary.className = 'quiz-summary';
-    summary.innerHTML = `
-        <h2>Quiz Results</h2>
-        <p>Total time: <strong>${timeString}</strong></p>
-        <p>Correct: <strong>${correct}</strong> out of <strong>${total}</strong></p>
-        <div class="summary-actions">
-          <button id="restartBtn" type="button">Play again</button>
-        </div>
-    `;
+        summary.innerHTML = `
+                <h2>Quiz Results</h2>
+                <p>Total time: <strong>${timeString}</strong></p>
+                <p>Correct: <strong>${correct}</strong> out of <strong>${total}</strong></p>
+                <div class="summary-actions">
+                    <button id="restartBtn" type="button" class="btn btn-primary">Play again</button>
+                </div>
+        `;
     container.appendChild(summary);
 
     const restartBtn = document.getElementById('restartBtn');
@@ -517,8 +770,8 @@ function displayQuestions(questions = [], container) {
     container.innerHTML = '';
 
     questions.forEach((q, qi) => {
-        const card = document.createElement('div');
-        card.className = 'question-card';
+    const card = document.createElement('div');
+    card.className = 'card p-3 question-card';
 
     // Show question number
     const numberEl = document.createElement('div');
@@ -538,13 +791,13 @@ function displayQuestions(questions = [], container) {
 
         shuffle(answers);
 
-        const answersList = document.createElement('div');
-        answersList.className = 'answers-list';
+    const answersList = document.createElement('div');
+    answersList.className = 'answers-list d-grid gap-2';
 
         answers.forEach((ans, ai) => {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'answer-option';
+            btn.className = 'btn btn-outline-primary answer-option text-start';
             btn.dataset.correct = ans.correct ? 'true' : 'false';
             btn.textContent = ans.text;
 
@@ -558,21 +811,31 @@ function displayQuestions(questions = [], container) {
                 // Mark selected
                 btn.classList.add('selected');
 
-                // Reveal correct/incorrect states
+                // Reveal correct/incorrect states (use bootstrap button classes)
                 const optionButtons = answersList.querySelectorAll('.answer-option');
                 optionButtons.forEach(ob => {
-                    ob.classList.remove('selected');
+                    ob.classList.remove('selected', 'btn-primary', 'btn-success', 'btn-danger');
                     if (ob === btn) ob.classList.add('selected');
                     const isCorrect = ob.dataset.correct === 'true';
                     if (isCorrect) {
-                        ob.classList.add('correct');
+                        ob.classList.add('correct', 'btn-success');
+                        ob.classList.remove('btn-outline-primary');
                     } else if (ob === btn && !isCorrect) {
-                        ob.classList.add('incorrect');
+                        ob.classList.add('incorrect', 'btn-danger');
+                        ob.classList.remove('btn-outline-primary');
+                    } else {
+                        ob.classList.remove('btn-success', 'btn-danger');
+                        ob.classList.add('btn-outline-primary');
                     }
-                    // disable all options
-                    ob.disabled = true;
+                            // disable all options
+                            ob.disabled = true;
                 });
+                        // record per-question answer so resume can restore this selection
+                        perQuestionAnswers[qi] = { selectedAnswerText: btn.textContent, wasCorrect: btn.dataset.correct === 'true', answered: true };
             });
+
+                // record per-question answer for resume in displayQuestions (bulk mode)
+                // when clicked above we will set perQuestionAnswers[qi], so no extra action here
 
             answersList.appendChild(btn);
         });

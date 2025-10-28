@@ -3,39 +3,46 @@
     <head>
         <title>Trivia Application</title>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <!-- Bootstrap CSS -->
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
         <link href="styles.css" rel="stylesheet">
         <script src="script.js"></script>
     </head>
     <body>
-        <div class="container">
-            <p class="title">Trivia Setup</p>
-            <p class="base-text">On this page, you will pick the amount of questions you want, and choose the topic.</p>
+        <div class="container py-4">
+            <h1 class="h4 mb-2">Trivia Setup</h1>
+            <p class="text-muted">On this page, you will pick the amount of questions you want, and choose the topic.</p>
             <!-- Login screen shown first -->
-            <div id="loginContainer" class="login-container">
-                <h2>Login</h2>
-                <label for="username" class="base-text">Username:</label>
-                <input type="text" id="username" name="username" placeholder="Enter username">
+            <div id="loginContainer" class="login-container card p-3 mb-3">
+                <h2 class="h5">Login</h2>
+                <label for="username" class="form-label">Username:</label>
+                <input type="text" id="username" name="username" placeholder="Enter username" class="form-control mb-2">
 
-                <label for="password" class="base-text">Password:</label>
-                <input type="password" id="password" name="password" placeholder="Enter password">
+                <label for="password" class="form-label">Password:</label>
+                <input type="password" id="password" name="password" placeholder="Enter password" class="form-control mb-2">
 
-                <div class="credentials-row">
-                    <label><input type="checkbox" id="rememberCreds"> Remember credentials</label>
-                    <button type="button" id="clearCreds" class="small-button">Clear saved</button>
+                <div class="credentials-row d-flex align-items-center gap-2 mb-2">
+                    <label class="mb-0"><input type="checkbox" id="rememberCreds"> Remember credentials</label>
+                    <button type="button" id="clearCreds" class="btn btn-sm btn-outline-secondary">Clear saved</button>
                 </div>
 
                 <div class="login-actions">
-                    <button type="button" id="loginBtn" class="submit-button">Login & Continue</button>
-                    <button type="button" id="viewSummaryBtn" class="small-button">View Summary</button>
+                    <button type="button" id="loginBtn" class="btn btn-primary me-2">Login & Continue</button>
+                    <button type="button" id="resumeBtn" class="btn btn-sm btn-outline-primary hidden me-2">Resume Quiz</button>
+                    <button type="button" id="viewSummaryBtn" class="btn btn-sm btn-outline-secondary">View Summary</button>
                 </div>
             </div>
 
             <form id="triviaForm" class="hidden">
-                <label for="num-questions" class="base-text">Number of Questions:</label>
-                <input type="number" id="numQuestions" name="numQuestions" min="1" max="50" value="10" required>
+                <div class="setup card p-3 mb-3">
+                <label for="num-questions" class="form-label">Number of Questions:</label>
+                <input type="number" id="numQuestions" name="numQuestions" min="1" max="50" value="10" required class="form-control mb-3">
                 
-                <label for="category" class="base-text">Category:</label>
-                <select id="category" name="category" required>
+                                <div class="selectors-column row g-3">
+                                    <div class="selector-item col-md-4">
+                                        <label for="category" class="form-label">Category:</label>
+                                        <select id="category" name="category" required class="form-select">
                     <option value="9">General Knowledge</option>
                     <option value="10">Entertainment: Books</option>
                     <option value="11">Entertainment: Film</option>
@@ -60,35 +67,43 @@
                     <option value="30">Science: Gadgets</option>
                     <option value="31">Entertainment: Japanese Anime & Manga</option>
                     <option value="32">Entertainment: Cartoon & Animations</option>
-                </select>
+                                        </select>
+                                    </div>
 
-                <label for="difficulty" class="base-text">Difficulty:</label>
-                <select id="difficulty" name="difficulty" required>
+                                    <div class="selector-item col-md-4">
+                                        <label for="difficulty" class="form-label">Difficulty:</label>
+                                        <select id="difficulty" name="difficulty" required class="form-select">
                     <option value="easy">Easy</option>
                     <option value="medium">Medium</option>
                     <option value="hard">Hard</option>
-                </select>
+                                        </select>
+                                    </div>
 
-                <label for="type" class="base-text">Type:</label>
-                <select id="type" name="responseType" required>
+                                    <div class="selector-item col-md-4">
+                                        <label for="type" class="form-label">Type:</label>
+                                        <select id="type" name="responseType" required class="form-select">
                     <option value="multiple">Multiple Choice</option>
                     <option value="boolean">True / False</option>
-                </select>
+                                        </select>
+                                    </div>
+                                </div>
 
-                <div class="timer-row">
-                    <label><input type="checkbox" id="enableTimer"> Enable timer (auto-advance)</label>
-                    <label for="timerSeconds">Seconds:</label>
-                    <input type="number" id="timerSeconds" name="timerSeconds" min="1" max="300" value="10">
+                <div class="timer-row d-flex align-items-center gap-2 my-3">
+                    <label class="mb-0"><input type="checkbox" id="enableTimer"> Enable timer (auto-advance)</label>
+                    <label for="timerSeconds" class="mb-0">Seconds:</label>
+                    <input type="number" id="timerSeconds" name="timerSeconds" min="1" max="300" value="10" class="form-control form-control-sm" style="width:100px;">
                 </div>
                 
-                <button type="submit" id="triviaSubmit" class="submit-button">Start Trivia</button>
+                <button type="submit" id="triviaSubmit" class="btn btn-primary">Start Trivia</button>
+                </div>
 
                 <div id="questionsContainer"></div>
-                <div id="quizControls" class="hidden">
-                    <span id="timerDisplay" aria-live="polite"></span>
-                    <button type="button" id="nextBtn" disabled>Next</button>
-                    <button type="button" id="finishBtn" class="hidden">Finish</button>
-                    <button type="button" id="showScoreBtn" class="hidden">Show Score</button>
+                <div id="quizControls" class="hidden d-flex align-items-center gap-2 mt-3">
+                    <span id="timerDisplay" aria-live="polite" class="me-2"></span>
+                    <button type="button" id="quitBtn" class="btn btn-outline-danger">Quit</button>
+                    <button type="button" id="nextBtn" disabled class="btn btn-primary">Next</button>
+                    <button type="button" id="finishBtn" class="hidden btn btn-success">Finish</button>
+                    <button type="button" id="showScoreBtn" class="hidden btn btn-secondary">Show Score</button>
                 </div>
             </form>
         </div>
